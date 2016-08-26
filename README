@@ -7,7 +7,7 @@ My solution is here.
 It's generic, you define network just like always, you define volumes as META labels in your nomad job config.
 It's working for me ... in beta.
 
-an example job for the docker registry is included in registry.nomad.
+an example job for the docker registry is included in file: registry.nomad.
 
 to INSTALL (must do this on each docker host):
 pip install docker-py
@@ -21,21 +21,8 @@ This is a work-around.  I hope they add this soon.
 
 all META keys are capitalized by NOMAD, so be sure to define your _LABELS as uppercase.
 
-required keys:
-IMAGE -- name of the docker image to pull.
+the docker container will be removed and stopped, if it's already running.
+at exit (nomad stop <job>) time, the docker container will be stopped(but not removed)
 
-optional:
-NOMAD_META_REGISTRY_URL = the URL for the regitry to pull from, must include trailing /.
+for details on configuration see the top of the runNomadDocker.py file, or the example file registry.nomad.
 
-nomad do HOST export networking at all, so you have to specify it special in the env {} config.
-NOMAD_META_NETWORK_LABELS = "" space seperated list of network labels.
-NOMAD_PORT_<label> = '' IP port to expose inside the container.
-NOMAD_IP_<label> = '' IP ADDRESS to expose.
-
-NOMAD_HOST_PORT_<label> = '' IP port to expose on the host.
-
-Currently only bind mounts are supported. here is how to do them:
-NOMAD_META_VOLUME_LABELS="" is a space seperated list of volume labels (just like network labels)
-NOMAD_META_SRC_<LABEL>=""  the source of the volume.
-NOMAD_META_DST_<LABEL>="" the destination of the volume.
-NOMAD_META_MODE_<LABEL>="" the mode (rw/ro) of the volume.  if missing defaults to rw.
