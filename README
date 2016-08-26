@@ -1,0 +1,41 @@
+Nomad's docker driver doesn't support volumes.
+There is someone that made a "wrapper" around nomad's raw_exec driver to give you volumes, but I didn't care for it.
+I wanted a more generic solution
+Their solution is here: https://gist.github.com/ketzacoatl/3ccf5bb822df51aed2b896641e931c8a#file-run-postgres
+My solution is here.
+
+It's generic, you define network just like always, you define volumes as META labels in your nomad job config.
+It's working for me ... in beta.
+
+an example job for the docker registry is included in registry.nomad.
+
+to INSTALL (must do this on each docker host):
+pip install docker-py
+cp runNomadDocker.py /usr/local/bin
+
+then configure your job to run raw_exec and runNomadDocker.py as your command.
+Config your mounts, network, image, etc.
+
+nomad docker doesn't allow us to do volumes, which hurts.
+This is a work-around.  I hope they get their act together soon.
+
+all META keys are capitalized by NOMAD, so be sure to define your _LABELS as uppercase.
+
+required keys:
+IMAGE -- name of the docker image to pull.
+
+optional:
+NOMAD_META_REGISTRY_URL = the URL for the regitry to pull from, must include trailing /.
+
+nomad do HOST export networking at all, so you have to specify it special in the env {} config.
+NOMAD_META_NETWORK_LABELS = "" space seperated list of network labels.
+NOMAD_PORT_<label> = '' IP port to expose inside the container.
+NOMAD_IP_<label> = '' IP ADDRESS to expose.
+
+NOMAD_HOST_PORT_<label> = '' IP port to expose on the host.
+
+nomad doesn't do volumes at all. currently only bind mounts are supported. here is how to do them:
+NOMAD_META_VOLUME_LABELS="" is a space seperated list of volume labels (just like network labels)
+NOMAD_META_SRC_<LABEL>=""  the source of the volume.
+NOMAD_META_DST_<LABEL>="" the destination of the volume.
+NOMAD_META_MODE_<LABEL>="" the mode (rw/ro) of the volume.  if missing defaults to rw.
