@@ -9,31 +9,49 @@ required keys:
 IMAGE -- name of the docker image to pull.
 
 optional:
-NOMAD_META_REGISTRY_URL = the URL for the regitry to pull from.
+REGISTRY_URL = the URL for the regitry to pull from.
+REGISTRY_USER = username for registry, defaults None
+REGISTRY_PASSWORD = password for registry, defaults None
+NETWORK_MODE = "bridge" network mode for docker:
+    ('bridge': creates a new network stack for the container on the Docker bridge, 'none': no networking for this container, 'container:[name|id]': reuses another container network stack, 'host': use the host network stack inside the container or any name that identifies an existing Docker network).
+	defaults "bridge"
 
 nomad do HOST export networking at all, so you have to specify it special in the env {} config.
-NOMAD_META_NETWORK_LABELS = "" space seperated list of network labels.
+NETWORK_LABELS = "" space seperated list of network labels.
 NOMAD_PORT_<label> = '' IP port to expose inside the container.
 NOMAD_IP_<label> = '' IP ADDRESS to expose.
 
 NOMAD_HOST_PORT_<label> = '' IP port to expose on the host.
 
 nomad doesn't do volumes at all. currently only bind mounts are supported. here is how to do them:
-NOMAD_META_VOLUME_LABELS="" is a space seperated list of volume labels (just like network labels)
-NOMAD_META_SRC_<LABEL>=""  the source of the volume.
-NOMAD_META_DST_<LABEL>="" the destination of the volume.
-NOMAD_META_MODE_<LABEL>="" the mode (rw/ro) of the volume.  if missing defaults to rw.
+VOLUME_LABELS="" is a space seperated list of volume labels (just like network labels)
+SRC_<LABEL>=""  the source of the volume.
+DST_<LABEL>="" the destination of the volume.
+MODE_<LABEL>="" the mode (rw/ro) of the volume.  if missing defaults to rw.
 """
+
 from __future__ import print_function
 import os
 import signal
 import sys
 
-from docker import Client
+try:
+    from docker import Client
+except ImportError:
+    print("You must install docker-py module, try running: pip install docker-py")
 
 #used for signal, yes globals suck, get over it.
 RUNNINGID=0
 DEBUG=True
+
+def getKey(name, default=None):
+    """get key or set default from os.environ, which is ""
+    """
+    if os.environ.has_key(name):
+	ret = os.environ[name]
+    else:
+	ret = default
+    return ret
 
 def main(buildNumber):
     """main code"""
@@ -41,32 +59,21 @@ def main(buildNumber):
     cli = Client(base_url='unix://var/run/docker.sock')
     # specify the network mode, port bindings, and volume mounts.
     # this is how the docker python client wants these parameters
-    if os.environ.has_key('NOMAD_META_NETWORK_LABELS'):
-	networkLabels = os.environ['NOMAD_META_NETWORK_LABELS']
-    else:
-	networkLabels = ""
+    networkMode = getKey('NOMAD_META_NETWORK_MODE', "bridge")
+    networkLabels = getKey('NOMAD_META_NETOWKR_LABELS', "")
     portBindings = {}
     for label in networkLabels.split():
 	port = os.environ['NOMAD_PORT_{}'.format(label)]
 	ip = os.environ['NOMAD_IP_{}'.format(label)]
-	if os.environ.has_key('NOMAD_HOST_PORT_{}'.format(label)):
-	    hostPort = os.environ['NOMAD_HOST_PORT_{}'.format(label)]
-	else:
-	    hostPort = None
+	hostPort = getKey('NOMAD_HOST_PORT_{}.format(label)')
 	portBindings[port] = (ip, hostPort)
 	print("exposing container port {} to external ip:port {}:{}".format(port, ip, hostPort))
-    if os.environ.has_key('NOMAD_META_VOLUME_LABELS'):
-	volumeLabels = os.environ['NOMAD_META_VOLUME_LABELS']
-    else:
-	volumeLabels = ""
+    volumeLabels = getKey('NOMAD_META_VOLUME_LABELS', "")
     volumes = {}
     for label in volumeLabels.split():
 	src = os.environ['NOMAD_META_SRC_{}'.format(label)]
 	dst = os.environ['NOMAD_META_DST_{}'.format(label)]
-	if os.environ.has_key('NOMAD_META_MODE_{}'.format(label)):
-	    mode = os.environ['NOMAD_META_MODE_{}'.format(label)]
-	else:
-	    mode = 'rw'
+	mode = getKey('NOMAD_META_MODE_{}'.format(label), "rw")
 	volumes[src] = {'bind':dst, 'mode':mode}
 	print("binding volume {} src:dst:mode {}:{}:{}".format(label,src,dst,mode))
     labels = {}
@@ -77,18 +84,19 @@ def main(buildNumber):
 	    newk = k.replace('NOMAD_META_','')
 	    labels[newk] = os.environ[k]
     hostConfig  = cli.create_host_config(port_bindings=portBindings,
-		    binds=volumes)
+		    binds=volumes, network_mode=networkMode)
     serviceName = os.environ['NOMAD_META_IMAGE']
     dockerName = "{}-{}".format(serviceName, os.environ['NOMAD_ALLOC_ID'])
-    if os.environ.has_key('NOMAD_META_REGISTRY_URL'):
-	registryURL = os.environ['NOMAD_META_REGISTRY_URL']
-    else:
-	registryURL = ""
+    registryURL = getKey('NOMAD_META_REGISTRY_URL', "")
+    registryAuthConfig = {
+	'username': getKey('NOMAD_META_REGISTRY_USER'),
+	'password': getKey('NOMAD_META_REGISTRY_PASSWORD')
+	}
     imageTag = buildNumber
     registry = '%s%s' % (registryURL, serviceName)
     image = "{}:{}".format(registry, imageTag)
     print("will download image {}:{}".format(registry, imageTag))
-    cli.pull(repository=registry, tag=imageTag, stream=False)
+    cli.pull(repository=registry, tag=imageTag, stream=False, auth_config=registryAuthConfig)
     containers = cli.containers(all=True,filters={'name':image})
     for i in containers:
 	if i['Image'] == image:
@@ -121,8 +129,8 @@ def cleanupDocker(signal, frame):
 
 signal.signal(signal.SIGINT, cleanupDocker)
 
-def printDic(d):
-    """for printing os.environ, pprint doesn't do it well
+def printEnv(d):
+    """for printing os.environ, pprint doesn't do it well *sad face*
     """
     for k in d.keys():
 	print("{}: {}".format(k, d[k]))
@@ -135,9 +143,9 @@ if __name__ == '__main__':
     try:
 	print("nomad-rundocker v0.1")
 	if DEBUG:
-	    printDic(os.environ)
+	    printEnv(os.environ)
 	main(buildNumber)
     except KeyError:
 	print("UNABLE to find key, current environment is:")
-	printDic(os.environ)
+	printEnv(os.environ)
 	raise
