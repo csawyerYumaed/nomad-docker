@@ -1,4 +1,4 @@
-Nomad's docker driver doesn't support volumes.
+Nomad's (https://github.com/hashicorp/nomad) docker driver doesn't support volumes.
 There is someone that made a "wrapper" around nomad's raw_exec driver to give you volumes, but I didn't care for it.
 I wanted a more generic solution
 Their solution is here: https://gist.github.com/ketzacoatl/3ccf5bb822df51aed2b896641e931c8a#file-run-postgres
