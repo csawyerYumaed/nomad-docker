@@ -109,8 +109,8 @@ def main(buildNumber):
 		print('container {} exists, but is not running, removing id {}'.format(i['Image'], i['Id']))
 		#cli.remove_container(i['Id'])
     container = cli.create_container(image=image, detach=True, name=dockerName,
-                                     ports=[port], environment=labels,
-				     labels=labels, host_config=hostConfig)
+                                     environment=labels, labels=labels,
+				     host_config=hostConfig)
     print("created container: {}".format(container))
     id=container.get('Id')
     RUNNINGID=id
