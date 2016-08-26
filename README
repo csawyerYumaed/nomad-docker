@@ -17,7 +17,7 @@ Then configure your job to run raw_exec and runNomadDocker.py as your command.
 Config your mounts, network, image, etc via meta { } config block (details below).
 
 nomad docker doesn't allow us to do volumes, which hurts.
-This is a work-around.  I hope they get their add this soon.
+This is a work-around.  I hope they add this soon.
 
 all META keys are capitalized by NOMAD, so be sure to define your _LABELS as uppercase.
 
