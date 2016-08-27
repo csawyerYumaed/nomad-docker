@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python -u
 """
 nomad docker doesn't allow us to do volumes, which hurts.
 This is a work-around.  I hope they get their act together soon.
@@ -60,12 +60,12 @@ def main(buildNumber):
     # specify the network mode, port bindings, and volume mounts.
     # this is how the docker python client wants these parameters
     networkMode = getKey('NOMAD_META_NETWORK_MODE', "bridge")
-    networkLabels = getKey('NOMAD_META_NETOWKR_LABELS', "")
+    networkLabels = getKey('NOMAD_META_NETWORK_LABELS', "")
     portBindings = {}
     for label in networkLabels.split():
-	port = os.environ['NOMAD_PORT_{}'.format(label)]
-	ip = os.environ['NOMAD_IP_{}'.format(label)]
-	hostPort = getKey('NOMAD_HOST_PORT_{}.format(label)')
+	port = getKey('NOMAD_PORT_{}'.format(label))
+	ip = getKey('NOMAD_IP_{}'.format(label))
+	hostPort = getKey('NOMAD_HOST_PORT_{}'.format(label))
 	portBindings[port] = (ip, hostPort)
 	print("exposing container port {} to external ip:port {}:{}".format(port, ip, hostPort))
     volumeLabels = getKey('NOMAD_META_VOLUME_LABELS', "")
@@ -98,19 +98,28 @@ def main(buildNumber):
     print("will download image {}:{}".format(registry, imageTag))
     cli.pull(repository=registry, tag=imageTag, stream=False, auth_config=registryAuthConfig)
     containers = cli.containers(all=True,filters={'name':image})
+    # if container name or image is already around, stop and remove it, since we are about to run it again.
     for i in containers:
 	if i['Image'] == image:
 	    # currently running, we should stop it.
 	    if i['State'] == 'running':
 		print("stoppping container {} with ID {}".format(i['Image'], i['Id']))
-		#cli.stop(i['Id'])
-		#cli.remove_container(i['Id'])
+		cli.stop(i['Id'])
+		cli.remove_container(i['Id'])
 	    else:
 		print('container {} exists, but is not running, removing id {}'.format(i['Image'], i['Id']))
-		#cli.remove_container(i['Id'])
+		cli.remove_container(i['Id'])
+	if dockerName in i['Names']:
+	    if i['State'] == 'running':
+		print("stoppping container {} with ID {}".format(i['Image'], i['Id']))
+		cli.stop(i['Id'])
+		cli.remove_container(i['Id'])
+	    else:
+		print('container {} exists, but is not running, removing id {}'.format(i['Image'], i['Id']))
+		cli.remove_container(i['Id'])
     container = cli.create_container(image=image, detach=True, name=dockerName,
                                      environment=labels, labels=labels,
-				     host_config=hostConfig)
+				     ports=portBindings.keys(), host_config=hostConfig)
     print("created container: {}".format(container))
     id=container.get('Id')
     RUNNINGID=id
