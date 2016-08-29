@@ -36,125 +36,144 @@ import signal
 import sys
 
 try:
-    from docker import Client
+	from docker import Client
 except ImportError:
-    print("You must install docker-py module, try running: pip install docker-py")
+	print("You must install docker-py module, try running: pip install docker-py")
 
 #used for signal, yes globals suck, get over it.
-RUNNINGID=0
-DEBUG=True
+RUNNINGID = 0
+DEBUG = True
+
 
 def getKey(name, default=None):
-    """get key or set default from os.environ, which is ""
+	"""get key or set default from os.environ, which is ""
     """
-    if os.environ.has_key(name):
-	ret = os.environ[name]
-    else:
-	ret = default
-    return ret
+	if os.environ.has_key(name):
+		ret = os.environ[name]
+	else:
+		ret = default
+	return ret
+
 
 def main(buildNumber):
-    """main code"""
-    global RUNNINGID
-    cli = Client(base_url='unix://var/run/docker.sock')
-    # specify the network mode, port bindings, and volume mounts.
-    # this is how the docker python client wants these parameters
-    networkMode = getKey('NOMAD_META_NETWORK_MODE', "bridge")
-    networkLabels = getKey('NOMAD_META_NETWORK_LABELS', "")
-    portBindings = {}
-    for label in networkLabels.split():
-	port = getKey('NOMAD_PORT_{}'.format(label))
-	ip = getKey('NOMAD_IP_{}'.format(label))
-	hostPort = getKey('NOMAD_HOST_PORT_{}'.format(label))
-	portBindings[port] = (ip, hostPort)
-	print("exposing container port {} to external ip:port {}:{}".format(port, ip, hostPort))
-    volumeLabels = getKey('NOMAD_META_VOLUME_LABELS', "")
-    volumes = {}
-    for label in volumeLabels.split():
-	src = os.environ['NOMAD_META_SRC_{}'.format(label)]
-	dst = os.environ['NOMAD_META_DST_{}'.format(label)]
-	mode = getKey('NOMAD_META_MODE_{}'.format(label), "rw")
-	volumes[src] = {'bind':dst, 'mode':mode}
-	print("binding volume {} src:dst:mode {}:{}:{}".format(label,src,dst,mode))
-    labels = {}
-    # just move all the nomad stuff into docker labels... why not!
-    for k in os.environ.keys():
-	#redefine them all without the NOMAD_META prefix.
-	if 'NOMAD' in k:
-	    newk = k.replace('NOMAD_META_','')
-	    labels[newk] = os.environ[k]
-    hostConfig  = cli.create_host_config(port_bindings=portBindings,
-		    binds=volumes, network_mode=networkMode)
-    serviceName = os.environ['NOMAD_META_IMAGE']
-    dockerName = "{}-{}".format(serviceName, os.environ['NOMAD_ALLOC_ID'])
-    registryURL = getKey('NOMAD_META_REGISTRY_URL', "")
-    registryAuthConfig = {
-	'username': getKey('NOMAD_META_REGISTRY_USER'),
-	'password': getKey('NOMAD_META_REGISTRY_PASSWORD')
-	}
-    imageTag = buildNumber
-    registry = '%s%s' % (registryURL, serviceName)
-    image = "{}:{}".format(registry, imageTag)
-    print("will download image {}:{}".format(registry, imageTag))
-    cli.pull(repository=registry, tag=imageTag, stream=False, auth_config=registryAuthConfig)
-    containers = cli.containers(all=True,filters={'name':image})
-    # if container name or image is already around, stop and remove it, since we are about to run it again.
-    for i in containers:
-	if i['Image'] == image:
-	    # currently running, we should stop it.
-	    if i['State'] == 'running':
-		print("stoppping container {} with ID {}".format(i['Image'], i['Id']))
-		cli.stop(i['Id'])
-		cli.remove_container(i['Id'])
-	    else:
-		print('container {} exists, but is not running, removing id {}'.format(i['Image'], i['Id']))
-		cli.remove_container(i['Id'])
-	if dockerName in i['Names']:
-	    if i['State'] == 'running':
-		print("stoppping container {} with ID {}".format(i['Image'], i['Id']))
-		cli.stop(i['Id'])
-		cli.remove_container(i['Id'])
-	    else:
-		print('container {} exists, but is not running, removing id {}'.format(i['Image'], i['Id']))
-		cli.remove_container(i['Id'])
-    container = cli.create_container(image=image, detach=True, name=dockerName,
-                                     environment=labels, labels=labels,
-				     ports=portBindings.keys(), host_config=hostConfig)
-    print("created container: {}".format(container))
-    id=container.get('Id')
-    RUNNINGID=id
-    cli.start(container=id)
-    print('container started..: retrieve and print stdout/err...')
-    for msg in cli.logs(container=id, stream=True, stdout=True, stderr=True):
-        print(msg, end="")
+	"""main code"""
+	global RUNNINGID
+	cli = Client(base_url='unix://var/run/docker.sock')
+	# specify the network mode, port bindings, and volume mounts.
+	# this is how the docker python client wants these parameters
+	networkMode = getKey('NOMAD_META_NETWORK_MODE', "bridge")
+	networkLabels = getKey('NOMAD_META_NETWORK_LABELS', "")
+	portBindings = {}
+	for label in networkLabels.split():
+		port = getKey('NOMAD_PORT_{}'.format(label))
+		ip = getKey('NOMAD_IP_{}'.format(label))
+		hostPort = getKey('NOMAD_HOST_PORT_{}'.format(label))
+		portBindings[port] = (ip, hostPort)
+		print("exposing container port {} to external ip:port {}:{}".format(
+      port, ip, hostPort))
+	volumeLabels = getKey('NOMAD_META_VOLUME_LABELS', "")
+	volumes = {}
+	for label in volumeLabels.split():
+		src = os.environ['NOMAD_META_SRC_{}'.format(label)]
+		dst = os.environ['NOMAD_META_DST_{}'.format(label)]
+		mode = getKey('NOMAD_META_MODE_{}'.format(label), "rw")
+		volumes[src] = {'bind': dst, 'mode': mode}
+		print("binding volume {} src:dst:mode {}:{}:{}".format(label, src, dst,
+                                                         mode))
+	labels = {}
+	# just move all the nomad stuff into docker labels... why not!
+	for k in os.environ.keys():
+		#redefine them all without the NOMAD_META prefix.
+		if 'NOMAD' in k:
+			newk = k.replace('NOMAD_META_', '')
+			labels[newk] = os.environ[k]
+	hostConfig = cli.create_host_config(
+     port_bindings=portBindings, binds=volumes, network_mode=networkMode)
+	serviceName = os.environ['NOMAD_META_IMAGE']
+	dockerName = "{}-{}".format(serviceName, os.environ['NOMAD_ALLOC_ID'])
+	registryURL = getKey('NOMAD_META_REGISTRY_URL', "")
+	registryAuthConfig = {
+     'username': getKey('NOMAD_META_REGISTRY_USER'),
+     'password': getKey('NOMAD_META_REGISTRY_PASSWORD')
+ }
+	imageTag = buildNumber
+	registry = '%s%s' % (registryURL, serviceName)
+	image = "{}:{}".format(registry, imageTag)
+	print("will download image {}:{}".format(registry, imageTag))
+	cli.pull(
+     repository=registry,
+     tag=imageTag,
+     stream=False,
+     auth_config=registryAuthConfig)
+	containers = cli.containers(all=True, filters={'name': image})
+	# if container name or image is already around, stop and remove it, since we are about to run it again.
+	for i in containers:
+		if i['Image'] == image:
+			# currently running, we should stop it.
+			if i['State'] == 'running':
+				print("stoppping container {} with ID {}".format(i['Image'], i['Id']))
+				cli.stop(i['Id'])
+				cli.remove_container(i['Id'])
+			else:
+				print('container {} exists, but is not running, removing id {}'.format(i[
+        'Image'], i['Id']))
+				cli.remove_container(i['Id'])
+		if dockerName in i['Names']:
+			if i['State'] == 'running':
+				print("stoppping container {} with ID {}".format(i['Image'], i['Id']))
+				cli.stop(i['Id'])
+				cli.remove_container(i['Id'])
+			else:
+				print('container {} exists, but is not running, removing id {}'.format(i[
+        'Image'], i['Id']))
+				cli.remove_container(i['Id'])
+	container = cli.create_container(
+     image=image,
+     detach=True,
+     name=dockerName,
+     environment=labels,
+     labels=labels,
+     ports=portBindings.keys(),
+     host_config=hostConfig)
+	print("created container: {}".format(container))
+	id = container.get('Id')
+	RUNNINGID = id
+	cli.start(container=id)
+	print('container started..: retrieve and print stdout/err...')
+	for msg in cli.logs(container=id, stream=True, stdout=True, stderr=True):
+		print(msg, end="")
+
 
 def cleanupDocker(signal, frame):
-    """stop container"""
-    cli = Client(base_url='unix://var/run/docker.sock')
-    if RUNNINGID:
-	print("stopping container: {}".format(RUNNINGID))
-	cli.stop(RUNNINGID)
-    sys.exit(0)
+	"""stop container"""
+	cli = Client(base_url='unix://var/run/docker.sock')
+	if RUNNINGID:
+		print("stopping container: {}".format(RUNNINGID))
+		cli.stop(RUNNINGID)
+	sys.exit(0)
+
 
 signal.signal(signal.SIGINT, cleanupDocker)
 
+
 def printEnv(d):
-    """for printing os.environ, pprint doesn't do it well *sad face*
+	"""for printing os.environ, pprint doesn't do it well *sad face*
     """
-    for k in d.keys():
-	print("{}: {}".format(k, d[k]))
+	for k in d.keys():
+		print("{}: {}".format(k, d[k]))
+
 
 if __name__ == '__main__':
-    try:
-	buildNumber = sys.argv[1]
-    except IndexError:
-	buildNumber = 'latest'
-    try:
-	print("nomad-rundocker v0.1")
-	if DEBUG:
-	    printEnv(os.environ)
-	main(buildNumber)
-    except KeyError:
-	print("UNABLE to find key, current environment is:")
-	printEnv(os.environ)
-	raise
+	try:
+		buildNumber = sys.argv[1]
+	except IndexError:
+		buildNumber = 'latest'
+	try:
+		print("nomad-rundocker v0.1")
+		if DEBUG:
+			printEnv(os.environ)
+		main(buildNumber)
+	except KeyError:
+		print("UNABLE to find key, current environment is:")
+		printEnv(os.environ)
+		raise
