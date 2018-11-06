@@ -1,3 +1,6 @@
+UPDATE: nomad has this built in now, don't be a fool, use the built-in stuff.  
+This was all written and in production before Nomad had built-in support, we not longer use it.
+
 Nomad's (https://github.com/hashicorp/nomad) docker driver doesn't support volumes.
 There is someone that made a "wrapper" around nomad's raw_exec driver to give you volumes, but I didn't care for it.
 I wanted a more generic solution
